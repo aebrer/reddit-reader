@@ -18,7 +18,7 @@ python3 ~/projects/reddit-reader/scripts/read_post.py "URL" [--depth N] [--limit
 - **URL**: Any Reddit post link — direct, `/s/` share link, or comment permalink
 - **--depth**: Max comment nesting depth (default: 4)
 - **--limit**: Max top-level comments (default: 30)
-- Comment permalinks auto-highlight the linked comment with `<<<`
+- Comment permalinks show the full parent chain (root → linked comment `<<<` → replies) first, then the broader thread below. Depth/limit flags only affect the broader thread section.
 
 ## Browse a subreddit
 

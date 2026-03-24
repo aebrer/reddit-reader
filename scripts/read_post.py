@@ -49,9 +49,11 @@ def detect_comment_id(url: str) -> str | None:
     return match.group(1) if match else None
 
 
-def fetch_json(url: str) -> list:
+def fetch_json(url: str, extra_params: str = "") -> list:
     """Fetch the .json version of a Reddit URL."""
     json_url = url.rstrip("/") + "/.json"
+    if extra_params:
+        json_url += "?" + extra_params
     result = subprocess.run(
         ["curl", "-s", "-H", f"User-Agent: {USER_AGENT}", "-H", "Accept: application/json", json_url],
         capture_output=True, text=True
@@ -86,8 +88,12 @@ def format_post(post_data: dict) -> str:
     return "\n".join(lines)
 
 
-def extract_comments(children: list, max_depth: int, highlight_id: str | None = None) -> list[str]:
-    """Recursively extract comments into formatted lines."""
+def extract_comments(children: list, max_depth: int, highlight_id: str | None = None,
+                     min_depth: int = 0) -> list[str]:
+    """Recursively extract comments into formatted lines.
+
+    min_depth: normalize indentation so this depth renders at column 0.
+    """
     lines = []
     for child in children:
         if child["kind"] != "t1":
@@ -97,7 +103,8 @@ def extract_comments(children: list, max_depth: int, highlight_id: str | None = 
         if depth > max_depth:
             continue
 
-        indent = "  " * depth
+        display_depth = depth - min_depth
+        indent = "  " * display_depth
         marker = " <<<" if highlight_id and d["id"] == highlight_id else ""
         body = d["body"].replace("\n", f"\n{indent}  ")
         lines.append(f"{indent}[{d['score']}] u/{d['author']}: {body}{marker}")
@@ -106,9 +113,18 @@ def extract_comments(children: list, max_depth: int, highlight_id: str | None = 
             lines.extend(extract_comments(
                 d["replies"]["data"]["children"],
                 max_depth,
-                highlight_id
+                highlight_id,
+                min_depth
             ))
     return lines
+
+
+def post_url_from_comment_url(url: str) -> str:
+    """Strip comment ID from a permalink to get the base post URL."""
+    parts = url.rsplit("/comments/", 1)
+    segments = parts[1].split("/")
+    # /comments/postid/title/ — take first two segments
+    return parts[0] + "/comments/" + segments[0] + "/" + segments[1] + "/"
 
 
 def main():
@@ -121,31 +137,59 @@ def main():
     url = resolve_url(args.url)
     highlight_id = detect_comment_id(url)
 
-    # For comment links, strip the comment ID from URL so we get the full thread
     if highlight_id:
-        url = re.sub(r"/\w+/?$", "/", url.rsplit("/comments/", 1)[0] + "/comments/" + url.rsplit("/comments/", 1)[1].split("/")[0] + "/" + url.rsplit("/comments/", 1)[1].split("/")[1] + "/")
+        # Fetch the comment permalink with context to get the full parent chain
+        context_data = fetch_json(url, extra_params="context=10")
 
-    data = fetch_json(url)
+        post = context_data[0]["data"]["children"][0]["data"]
+        print(format_post(post))
+        print("---")
 
-    # Format post
-    post = data[0]["data"]["children"][0]["data"]
-    print(format_post(post))
-    print("---")
+        # Show the linked thread (parents → linked comment → replies) with no depth limit
+        context_comments = context_data[1]["data"]["children"]
+        root_depth = 0
+        if context_comments and context_comments[0]["kind"] == "t1":
+            root_depth = context_comments[0]["data"].get("depth", 0)
+        context_lines = extract_comments(
+            context_comments, max_depth=999, highlight_id=highlight_id,
+            min_depth=root_depth
+        )
+        print(f"=== LINKED THREAD (comment {highlight_id}) ===")
+        print("\n".join(context_lines))
 
-    # Format comments
-    comments = data[1]["data"]["children"]
-    if args.limit:
-        comments = comments[:args.limit]
+        # Now fetch the broader thread
+        post_url = post_url_from_comment_url(url)
+        data = fetch_json(post_url)
+        comments = data[1]["data"]["children"]
+        if args.limit:
+            comments = comments[:args.limit]
+        lines = extract_comments(comments, args.depth)
 
-    lines = extract_comments(comments, args.depth, highlight_id)
-    if highlight_id:
-        print(f"(Linked comment {highlight_id} marked with <<<)")
-    print("\n".join(lines))
+        print(f"\n=== FULL THREAD (top {args.limit}, depth {args.depth}) ===")
+        print("\n".join(lines))
 
-    total = post["num_comments"]
-    shown = len([l for l in lines if l.strip().startswith("[")])
-    if shown < total:
-        print(f"\n--- Showing {shown} of {total} comments (depth={args.depth}, limit={args.limit}) ---")
+        total = post["num_comments"]
+        shown = len([l for l in lines if l.strip().startswith("[")])
+        if shown < total:
+            print(f"\n--- Showing {shown} of {total} comments (depth={args.depth}, limit={args.limit}) ---")
+    else:
+        data = fetch_json(url)
+
+        post = data[0]["data"]["children"][0]["data"]
+        print(format_post(post))
+        print("---")
+
+        comments = data[1]["data"]["children"]
+        if args.limit:
+            comments = comments[:args.limit]
+
+        lines = extract_comments(comments, args.depth)
+        print("\n".join(lines))
+
+        total = post["num_comments"]
+        shown = len([l for l in lines if l.strip().startswith("[")])
+        if shown < total:
+            print(f"\n--- Showing {shown} of {total} comments (depth={args.depth}, limit={args.limit}) ---")
 
 
 if __name__ == "__main__":
