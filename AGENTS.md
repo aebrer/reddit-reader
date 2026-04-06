@@ -1,12 +1,12 @@
 # reddit-reader
 
-Lightweight scripts for reading Reddit content from the command line. Used as a Claude Code skill for fetching Reddit posts and subreddit listings when URLs come up in conversation.
+Lightweight scripts for reading Reddit content from the command line. Used as a skill for fetching Reddit posts and subreddit listings when URLs come up in conversation.
 
 ## Structure
 
 - `scripts/read_post.py` — fetch a single post + threaded comments
 - `scripts/read_subreddit.py` — fetch subreddit listing
-- `skills/reddit-reader/` — Claude skill (symlinked to `~/.claude/skills/reddit-reader`)
+- `skills/reddit-reader/` — dreb skill
 
 ## Key details
 
