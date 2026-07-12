@@ -12,5 +12,6 @@ Lightweight scripts for reading Reddit content from the command line. Used as a 
 
 - No dependencies beyond Python 3 stdlib + curl
 - Fetches via Reddit's undocumented `.json` endpoint on old.reddit.com
-- Only works from residential IPs (Reddit blocks cloud/VPS)
-- Rate limit: ~80 requests before 429 errors
+- If unauthenticated curl is blocked, retries with local Firefox Reddit cookies, then a configurable Redlib instance
+- `search_subreddit.py` is the preferred path for recent Reddit research because web indexes lag
+- Rate limit: ~80 direct Reddit requests before 429 errors; public Redlib availability can vary

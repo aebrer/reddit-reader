@@ -4,7 +4,7 @@ Lightweight command-line scripts for reading Reddit posts, comment threads, and 
 
 Works by hitting Reddit's undocumented `.json` endpoints on old.reddit.com. Output is clean, formatted plaintext designed to be easy to read in a terminal or pipe into an LLM.
 
-> **Note:** This only works from residential IPs. Reddit blocks requests from cloud/VPS providers.
+> **Note:** Reddit sometimes blocks unauthenticated command-line requests at the network-security layer. The scripts retry with Reddit cookies from the local Firefox profile and then fall back to a public Redlib frontend. Only Reddit cookies are exported to a temporary jar, which is deleted on exit. Set `REDDIT_READER_FIREFOX_COOKIES=0` to disable cookies, `REDDIT_READER_FIREFOX_PROFILE=/path/to/profile-or-cookies.sqlite` to choose a profile, or `REDDIT_READER_REDLIB_INSTANCE=https://example.com` to select another Redlib instance.
 
 ## Usage
 
@@ -28,6 +28,17 @@ python3 scripts/read_subreddit.py "SUBREDDIT" [--sort MODE] [--limit N]
 - Accepts bare names (`unixporn`), shorthand (`r/unixporn`), or full URLs
 - `--sort` — `hot` (default), `new`, `top`, `rising`
 - `--limit` — number of posts (default: 15)
+
+### Search a subreddit
+
+```bash
+python3 scripts/search_subreddit.py "SUBREDDIT" "SEARCH TERMS" [--sort MODE] [--time RANGE] [--limit N]
+```
+
+- Searches only the selected subreddit
+- `--sort` — `new` (default), `relevance`, `hot`, `top`, or `comments`
+- `--time` — `year` (default), `hour`, `day`, `week`, `month`, or `all`
+- Useful for current research that general-purpose search engines may not have indexed
 
 ## Why?
 

@@ -8,12 +8,8 @@ Supports:
 """
 
 import argparse
-import json
-import subprocess
-import sys
 
-
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
+from reddit_fetch import fetch_json as fetch_reddit_json
 
 
 def normalize_subreddit(input_str: str) -> str:
@@ -36,20 +32,8 @@ def normalize_subreddit(input_str: str) -> str:
 
 def fetch_json(subreddit: str, sort: str, limit: int) -> dict:
     """Fetch subreddit listing JSON."""
-    url = f"https://old.reddit.com/r/{subreddit}/{sort}/.json?limit={limit}"
-    result = subprocess.run(
-        ["curl", "-s", "-H", f"User-Agent: {USER_AGENT}", "-H", "Accept: application/json", url],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        print(f"Error fetching URL: {result.stderr}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError:
-        print(f"Failed to parse JSON. Response starts with: {result.stdout[:200]}", file=sys.stderr)
-        sys.exit(1)
+    url = f"https://old.reddit.com/r/{subreddit}/{sort}/"
+    return fetch_reddit_json(url, extra_params=f"limit={limit}")
 
 
 def format_post(post: dict, index: int) -> str:

@@ -30,16 +30,32 @@ python3 ~/projects/reddit-reader/scripts/read_subreddit.py "SUBREDDIT" [--sort M
 - **--sort**: `hot` (default), `new`, `top`, `rising`
 - **--limit**: Number of posts (default: 15)
 
+## Search a subreddit
+
+```bash
+python3 ~/projects/reddit-reader/scripts/search_subreddit.py "SUBREDDIT" "QUERY" [--sort MODE] [--time RANGE] [--limit N]
+```
+
+- **SUBREDDIT**: Name, shorthand, or subreddit URL
+- **QUERY**: Reddit search terms
+- **--sort**: `new` (default), `relevance`, `hot`, `top`, or `comments`
+- **--time**: `year` (default), `hour`, `day`, `week`, `month`, or `all`
+- Use this instead of a general web search when researching current Reddit opinions; search-engine indexes lag or omit recent threads
+- Search broadly first, then open the most relevant threads with `read_post.py` to inspect comments rather than relying on titles
+
 ## When to use
 
 - User pastes a Reddit link → use `read_post.py`
 - User asks "what's on r/whatever" → use `read_subreddit.py`
-- WebFetch fails on reddit.com → fall back to these scripts
+- User asks what Reddit users currently think or prefer → search relevant subreddits with `search_subreddit.py`, then read several result threads
+- WebFetch fails on reddit.com → use these scripts; they automatically try Reddit JSON, Firefox cookies, and finally Redlib
 - Your own web search turns up a Reddit thread worth reading → use `read_post.py`
 
 ## Notes
 
-- Works from Drew's residential IP — Reddit blocks cloud/VPS IPs
+- Direct Reddit requests may be blocked even from a residential IP; the scripts automatically fall back to a configurable Redlib instance
+- Set `REDDIT_READER_REDLIB_INSTANCE` if the default public instance is unavailable
 - Output is already formatted for readability; do not reformat or summarize unless asked
-- For long threads, start with defaults and increase `--depth` or `--limit` if the user wants more
+- For opinion research, distinguish firsthand hardware/use reports from generic recommendations and separate conclusions by use case
+- For long threads, start with defaults and increase `--depth` or `--limit` if needed
 - Share links (`/s/` URLs) are resolved automatically via curl redirect

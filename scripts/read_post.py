@@ -8,25 +8,17 @@ Supports:
 """
 
 import argparse
-import json
-import subprocess
-import sys
 import re
 from urllib.parse import urlparse
 
-
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
+from reddit_fetch import fetch_json, resolve_redirect_url
 
 
 def resolve_url(url: str) -> str:
     """Resolve share links and normalize to old.reddit.com."""
-    # Resolve /s/ share links via curl redirect
+    # Resolve /s/ share links via redirect.
     if "/s/" in url:
-        result = subprocess.run(
-            ["curl", "-sL", "-o", "/dev/null", "-w", "%{url_effective}", url],
-            capture_output=True, text=True
-        )
-        url = result.stdout.strip()
+        url = resolve_redirect_url(url)
 
     # Normalize to old.reddit.com
     parsed = urlparse(url)
@@ -47,26 +39,6 @@ def detect_comment_id(url: str) -> str | None:
     # Pattern: /comments/postid/title/commentid/
     match = re.search(r"/comments/\w+/[^/]*/(\w+)/?$", url)
     return match.group(1) if match else None
-
-
-def fetch_json(url: str, extra_params: str = "") -> list:
-    """Fetch the .json version of a Reddit URL."""
-    json_url = url.rstrip("/") + "/.json"
-    if extra_params:
-        json_url += "?" + extra_params
-    result = subprocess.run(
-        ["curl", "-s", "-H", f"User-Agent: {USER_AGENT}", "-H", "Accept: application/json", json_url],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        print(f"Error fetching URL: {result.stderr}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError:
-        print(f"Failed to parse JSON. Response starts with: {result.stdout[:200]}", file=sys.stderr)
-        sys.exit(1)
 
 
 def format_post(post_data: dict) -> str:
