@@ -1,10 +1,7 @@
 ---
 name: reddit-reader
 description: >
-  Read Reddit posts, comments, and subreddit listings. Use when: (1) the user sends a Reddit
-  URL, (2) your own research points to a Reddit thread (e.g. debugging, hardware discussions),
-  (3) the user asks "what's on r/subreddit right now", (4) a WebFetch fails on a reddit.com URL.
-  Supports direct links, share links (/s/), and comment permalinks.
+  Read Reddit posts, comments, and subreddit listings. Web Search does not surface up to date reddit results, use this!
 ---
 
 # Reddit Reader
