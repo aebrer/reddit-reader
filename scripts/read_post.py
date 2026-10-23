@@ -45,7 +45,8 @@ def format_post(post_data: dict) -> str:
     """Format the post header."""
     lines = []
     lines.append(f"TITLE: {post_data['title']}")
-    lines.append(f"AUTHOR: u/{post_data['author']} | SCORE: {post_data['score']} | COMMENTS: {post_data['num_comments']}")
+    score = post_data['score'] if post_data.get('score') is not None else '?'
+    lines.append(f"AUTHOR: u/{post_data['author']} | SCORE: {score} | COMMENTS: {post_data['num_comments']}")
     lines.append(f"SUBREDDIT: r/{post_data['subreddit']}")
 
     if post_data.get("selftext"):
@@ -79,7 +80,8 @@ def extract_comments(children: list, max_depth: int, highlight_id: str | None = 
         indent = "  " * display_depth
         marker = " <<<" if highlight_id and d["id"] == highlight_id else ""
         body = d["body"].replace("\n", f"\n{indent}  ")
-        lines.append(f"{indent}[{d['score']}] u/{d['author']}: {body}{marker}")
+        score = d['score'] if d.get('score') is not None else '?'
+        lines.append(f"{indent}[{score}] u/{d['author']}: {body}{marker}")
 
         if isinstance(d.get("replies"), dict):
             lines.extend(extract_comments(

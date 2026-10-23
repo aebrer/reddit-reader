@@ -10,12 +10,14 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import re
 from pathlib import Path
 import sqlite3
 import subprocess
 import sys
 import tempfile
 from typing import Any
+from urllib.parse import urlparse
 
 
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
@@ -100,6 +102,11 @@ def _curl(url: str, cookie_jar: str | None = None) -> subprocess.CompletedProces
         "curl",
         "-sS",
         "-L",
+        "--fail-with-body",
+        "--connect-timeout",
+        "10",
+        "--max-time",
+        "30",
         "-H",
         f"User-Agent: {USER_AGENT}",
         "-H",
@@ -148,41 +155,89 @@ def resolve_redirect_url(url: str) -> str:
     return url
 
 
+def _validate_payload(data: Any, url: str) -> Any:
+    """Reject API errors, challenge pages, and missing linked comments."""
+    try:
+        if "/comments/" not in urlparse(url).path:
+            if not isinstance(data["data"]["children"], list):
+                raise ValueError("invalid listing")
+            return data
+        post = data[0]["data"]["children"][0]
+        children = data[1]["data"]["children"]
+        if post["kind"] != "t3" or not post["data"]["title"] or not isinstance(children, list):
+            raise ValueError("invalid post")
+    except (KeyError, IndexError, TypeError, ValueError) as error:
+        raise RuntimeError("Response did not contain the requested Reddit data") from error
+
+    path = urlparse(url).path.removesuffix("/.json")
+    match = re.search(r"/comments/\w+/[^/]*/(\w+)/?$", path)
+    if match:
+        target_id = match.group(1)
+        pending = list(children)
+        while pending:
+            child = pending.pop()
+            if child.get("kind") != "t1":
+                continue
+            comment = child["data"]
+            if comment.get("id") == target_id:
+                return data
+            replies = comment.get("replies")
+            if isinstance(replies, dict):
+                pending.extend(replies["data"]["children"])
+        raise RuntimeError(f"Response did not contain linked comment {target_id}")
+    return data
+
+
 def fetch_json(url: str, extra_params: str = "") -> Any:
-    """Fetch Reddit JSON, then retry through Firefox cookies and Redlib."""
+    """Try Reddit JSON, Firefox cookies, Redlib, then browser-rendered posts."""
     json_url = url.rstrip("/") + "/.json"
     if extra_params:
         json_url += "?" + extra_params
 
-    result = _curl(json_url)
-    if result.returncode == 0:
+    errors = []
+
+    def direct(cookie_jar: str | None = None) -> Any:
+        result = _curl(json_url, cookie_jar)
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or "curl request failed")
         try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError:
-            pass
+            data = json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise RuntimeError("Reddit returned HTML instead of JSON") from error
+        return _validate_payload(data, json_url)
+
+    try:
+        return direct()
+    except RuntimeError as error:
+        errors.append(f"Reddit: {error}")
 
     cookie_jar = _export_reddit_firefox_cookies()
     if cookie_jar:
-        retry = _curl(json_url, cookie_jar)
-        if retry.returncode == 0:
-            try:
-                return json.loads(retry.stdout)
-            except json.JSONDecodeError:
-                pass
+        try:
+            return direct(cookie_jar)
+        except RuntimeError as error:
+            errors.append(f"Reddit with Firefox cookies: {error}")
 
-    # Public Redlib instances can still retrieve Reddit when its network-security
-    # layer rejects direct CLI requests. Keep this last so authenticated Reddit
-    # remains the preferred and most complete source.
     try:
         from redlib_fetch import fetch_compatible
 
-        print("Reddit request blocked; using Redlib fallback.", file=sys.stderr)
-        return fetch_compatible(json_url)
+        print("Reddit JSON unavailable; trying Redlib fallback.", file=sys.stderr)
+        return _validate_payload(fetch_compatible(json_url), json_url)
     except RuntimeError as error:
-        response_preview = result.stdout[:200] if result.stdout else result.stderr[:200]
-        print(
-            f"Reddit and Redlib requests failed: {error}. "
-            f"Reddit response starts with: {response_preview}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        errors.append(f"Redlib: {error}")
+        print(f"Redlib fallback failed: {error}", file=sys.stderr)
+
+    if "/comments/" in urlparse(url).path:
+        try:
+            from browser_fetch import fetch_compatible as fetch_browser
+
+            print("Trying Chromium browser fallback (public Reddit HTML).", file=sys.stderr)
+            data = _validate_payload(fetch_browser(json_url), json_url)
+            print("Browser output includes rendered comments only; unexpanded replies may be omitted.",
+                  file=sys.stderr)
+            return data
+        except RuntimeError as error:
+            errors.append(f"Browser: {error}")
+
+    print("Unable to retrieve Reddit content:\n" + "\n".join(errors), file=sys.stderr)
+    sys.exit(1)

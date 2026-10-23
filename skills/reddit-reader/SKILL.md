@@ -15,7 +15,7 @@ python3 ~/projects/reddit-reader/scripts/read_post.py "URL" [--depth N] [--limit
 - **URL**: Any Reddit post link — direct, `/s/` share link, or comment permalink
 - **--depth**: Max comment nesting depth (default: 4)
 - **--limit**: Max top-level comments (default: 30)
-- Comment permalinks show the full parent chain (root → linked comment `<<<` → replies) first, then the broader thread below. Depth/limit flags only affect the broader thread section.
+- Comment permalinks show available ancestors (root → linked comment `<<<` → replies) first, then the broader thread below. Indentation preserves who replies to whom. Depth/limit flags only affect the broader thread section.
 
 ## Browse a subreddit
 
@@ -45,13 +45,16 @@ python3 ~/projects/reddit-reader/scripts/search_subreddit.py "SUBREDDIT" "QUERY"
 - User pastes a Reddit link → use `read_post.py`
 - User asks "what's on r/whatever" → use `read_subreddit.py`
 - User asks what Reddit users currently think or prefer → search relevant subreddits with `search_subreddit.py`, then read several result threads
-- WebFetch fails on reddit.com → use these scripts; they automatically try Reddit JSON, Firefox cookies, and finally Redlib
+- WebFetch fails on reddit.com → use these scripts; they automatically try Reddit JSON, Firefox cookies, Redlib, then Chromium for post/comment pages
 - Your own web search turns up a Reddit thread worth reading → use `read_post.py`
 
 ## Notes
 
 - Direct Reddit requests may be blocked even from a residential IP; the scripts automatically fall back to a configurable Redlib instance
 - Set `REDDIT_READER_REDLIB_INSTANCE` if the default public instance is unavailable
+- For the optional browser fallback, run `npm ci && npx playwright install chromium` in `~/projects/reddit-reader`
+- Browser fallback uses public, logged-out HTML and announces itself on stderr. Unexpanded replies may be omitted; hidden/unavailable scores appear as `?`
+- If retrieval fails, report that failure. Do not substitute web searches for the unread comment or infer what it said
 - Output is already formatted for readability; do not reformat or summarize unless asked
 - For opinion research, distinguish firsthand hardware/use reports from generic recommendations and separate conclusions by use case
 - For long threads, start with defaults and increase `--depth` or `--limit` if needed
