@@ -6,56 +6,61 @@ description: >
 
 # Reddit Reader
 
+Uses Reddit's mobile GraphQL API directly through one TLS-compatible client. No Redlib instance, browser, or browser cookies.
+
 ## Read a post and its comments
 
 ```bash
-python3 ~/projects/reddit-reader/scripts/read_post.py "URL" [--depth N] [--limit N]
+~/projects/reddit-reader/.venv/bin/python ~/projects/reddit-reader/scripts/read_post.py "URL" [--depth N] [--limit N] [--max-pages N]
 ```
 
-- **URL**: Any Reddit post link — direct, `/s/` share link, or comment permalink
-- **--depth**: Max comment nesting depth (default: 4)
-- **--limit**: Max top-level comments (default: 30)
-- Comment permalinks show available ancestors (root → linked comment `<<<` → replies) first, then the broader thread below. Indentation preserves who replies to whom. Depth/limit flags only affect the broader thread section.
+- **URL**: Reddit post link, `redd.it` short link, `/s/` share link, or comment permalink
+- **--depth**: Max displayed comment nesting depth, starting at zero (default: 4)
+- **--limit**: Max top-level comments (default: 30; 0 means all retrieved roots)
+- **--max-pages**: Max comment API requests, including focused comment/ancestor requests (default: 20). Increase when stderr reports omitted replies or an ancestry budget limit.
+- Comment permalinks show ancestors (root → linked comment `<<<` → retrieved replies) first, then the broader thread. Indentation preserves who replies to whom. Depth/limit flags only affect the broader section.
+- Deep replies are retrieved through GraphQL cursors; the client asks for up to 200 comments at 10 levels per request. A large thread can require multiple requests.
 
 ## Browse a subreddit
 
 ```bash
-python3 ~/projects/reddit-reader/scripts/read_subreddit.py "SUBREDDIT" [--sort MODE] [--limit N]
+~/projects/reddit-reader/.venv/bin/python ~/projects/reddit-reader/scripts/read_subreddit.py "SUBREDDIT" [--sort MODE] [--limit N]
 ```
 
-- **SUBREDDIT**: Name (`unihertz`), shorthand (`r/unihertz`), or full URL
+- **SUBREDDIT**: Name (`unihertz`), shorthand (`r/unihertz`), or full URL; `all` and `popular` also work
 - **--sort**: `hot` (default), `new`, `top`, `rising`
-- **--limit**: Number of posts (default: 15)
+- **--limit**: Positive number of non-stickied posts (default: 15); paginates as needed
 
 ## Search a subreddit
 
 ```bash
-python3 ~/projects/reddit-reader/scripts/search_subreddit.py "SUBREDDIT" "QUERY" [--sort MODE] [--time RANGE] [--limit N]
+~/projects/reddit-reader/.venv/bin/python ~/projects/reddit-reader/scripts/search_subreddit.py "SUBREDDIT" "QUERY" [--sort MODE] [--time RANGE] [--limit N]
 ```
 
 - **SUBREDDIT**: Name, shorthand, or subreddit URL
-- **QUERY**: Reddit search terms
+- **QUERY**: Reddit search terms, restricted to this subreddit
 - **--sort**: `new` (default), `relevance`, `hot`, `top`, or `comments`
 - **--time**: `year` (default), `hour`, `day`, `week`, `month`, or `all`
-- Use this instead of a general web search when researching current Reddit opinions; search-engine indexes lag or omit recent threads
-- Search broadly first, then open the most relevant threads with `read_post.py` to inspect comments rather than relying on titles
+- **--limit**: Positive number of results (default: 25); paginates as needed
+- Use this instead of general web search for current Reddit opinions. Search broadly first, then open relevant threads with `read_post.py` rather than relying on titles.
 
 ## When to use
 
 - User pastes a Reddit link → use `read_post.py`
 - User asks "what's on r/whatever" → use `read_subreddit.py`
-- User asks what Reddit users currently think or prefer → search relevant subreddits with `search_subreddit.py`, then read several result threads
-- WebFetch fails on reddit.com → use these scripts; they automatically try Reddit JSON, Firefox cookies, Redlib, then Chromium for post/comment pages
-- Your own web search turns up a Reddit thread worth reading → use `read_post.py`
+- User asks what Reddit users currently think or prefer → use `search_subreddit.py`, then read several result threads
+- WebFetch fails on reddit.com → use these scripts
+- Your own web search turns up a relevant Reddit thread → use `read_post.py`
 
 ## Notes
 
-- Direct Reddit requests may be blocked even from a residential IP; the scripts automatically fall back to a configurable Redlib instance
-- Set `REDDIT_READER_REDLIB_INSTANCE` if the default public instance is unavailable
-- For the optional browser fallback, run `npm ci && npx playwright install chromium` in `~/projects/reddit-reader`
-- Browser fallback uses public, logged-out HTML and announces itself on stderr. Unexpanded replies may be omitted; hidden/unavailable scores appear as `?`
-- If retrieval fails, report that failure. Do not substitute web searches for the unread comment or infer what it said
-- Output is already formatted for readability; do not reformat or summarize unless asked
-- For opinion research, distinguish firsthand hardware/use reports from generic recommendations and separate conclusions by use case
-- For long threads, start with defaults and increase `--depth` or `--limit` if needed
-- Share links (`/s/` URLs) are resolved automatically via curl redirect
+- Always use the checkout's `.venv/bin/python` as shown; no shell activation is necessary.
+- If missing, set up the environment in `~/projects/reddit-reader`: `python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt`.
+- There is one fetching method, with anonymous sessions in memory. Old Redlib/Firefox settings no longer apply. HTTP blocks, rate limits, API errors, and missing linked comments fail nonzero; do not try the retired methods.
+- If retrieval fails, report the failure. Do not substitute web searches for an unread comment or infer what it said.
+- Check stderr for a page-budget warning before claiming that all replies were retrieved.
+- Output is already formatted for readability; do not summarize unless asked. Hidden scores are `?`; deleted/removed text is not recoverable.
+- For opinion research, distinguish firsthand use reports from generic recommendations and separate conclusions by use case.
+- For long threads, increase `--depth`, `--limit`, and/or `--max-pages` as needed.
+- Share links follow only Reddit redirects; if Reddit blocks resolution, request a direct permalink.
+- The API is undocumented and may change. Do not claim permanent anonymous access.

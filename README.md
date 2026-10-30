@@ -1,75 +1,91 @@
 # reddit-reader
 
-Lightweight command-line scripts for reading Reddit posts, comment threads, and subreddit listings — no API keys or OAuth. The basic paths need only Python 3 and `curl`; an optional Playwright/Chromium fallback handles blocked post and comment pages.
+Read Reddit posts, threaded comments, subreddit listings, and subreddit search from the command line. Output is readable plaintext for terminals and coding agents.
 
-Tries Reddit's undocumented `.json` endpoints on old.reddit.com, local Firefox cookies, then Redlib. If those fail for a post/comment URL, it renders public Reddit HTML in Chromium. Output is clean, formatted plaintext designed to be easy to read in a terminal or pipe into an LLM.
+All content comes directly from Reddit's mobile GraphQL API through **one transport**, [`curl_cffi`](https://github.com/lexiforest/curl_cffi), with browser-compatible TLS. The client creates an anonymous OAuth session; no Reddit account, API keys, browser login, or external scraping service is required.
 
-> **Note:** Reddit sometimes blocks unauthenticated command-line requests at the network-security layer. The scripts retry with Reddit cookies from the local Firefox profile and then fall back to a public Redlib frontend. Only Reddit cookies are exported to a temporary jar, which is deleted on exit. Set `REDDIT_READER_FIREFOX_COOKIES=0` to disable cookies, `REDDIT_READER_FIREFOX_PROFILE=/path/to/profile-or-cookies.sqlite` to choose a profile, or `REDDIT_READER_REDLIB_INSTANCE=https://example.com` to select another Redlib instance.
+## Install
 
-## Optional browser fallback
+Requires Python 3.10+.
 
 ```bash
-npm ci
-npx playwright install chromium
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
-Requires Node.js 18+ and Chromium's system libraries. The browser fallback uses an isolated, logged-out browser; it does not reuse your Firefox login or persist browser state. It preserves reply relationships using comment IDs and parent IDs, paragraph breaks, and the `<<<` marker on a linked comment. A response missing the requested comment is an error, not a successful fetch of an unrelated thread.
-
-All fallbacks are announced on stderr. Browser output includes only rendered comments: unexpanded replies may be omitted, and `--depth`/`--limit` filter the retrieved comments rather than guaranteeing that many are fetched. Hidden or unavailable browser scores appear as `?`. Reddit can still block a browser request; failures exit nonzero with diagnostics.
+There is no Node.js or browser dependency. The previous JSON, Firefox-cookie, public Redlib, and Chromium implementations have been removed. Their environment variables no longer apply. The reader does not inspect your browser profile or save session tokens to disk.
 
 ## Usage
 
-### Read a post and its comments
+### Read a post or linked comment
 
 ```bash
-python3 scripts/read_post.py "https://reddit.com/r/..." [--depth N] [--limit N]
+.venv/bin/python scripts/read_post.py "https://www.reddit.com/r/pebble/comments/1xj4whi/"
+.venv/bin/python scripts/read_post.py "REDDIT_COMMENT_URL" --depth 8 --limit 50 --max-pages 30
 ```
 
-- `--depth` — max comment nesting depth (default: 4)
-- `--limit` — max top-level comments (default: 30)
-- Supports direct links, `/s/` share links, and comment permalinks
-- Comment permalinks show available ancestors and replies, with the linked comment marked `<<<` and reply nesting preserved
+Accepts Reddit post/comment URLs, `redd.it` short links, and `/s/` share links. Share links must resolve through Reddit; blocked or unexpected redirects produce an error.
+
+- `--depth`: maximum displayed comment depth, starting at zero (default: 4).
+- `--limit`: maximum top-level comments displayed (default: 30; 0 means all retrieved roots).
+- `--max-pages`: maximum comment API requests, including focused comment/ancestor requests (default: 20). Each request asks for up to 200 comments at 10 levels of depth; cursors retrieve further comments and deeper replies.
+
+Comment permalinks show the parent chain, the exact linked comment marked `<<<`, and its retrieved replies first, then the broader thread. Depth/limit only filter the broader section. Reply relationships are reconstructed from comment IDs and parent IDs, including deleted parents whose identity is recoverable from replies. Deleted/removed text stays `[deleted]`/`[removed]`; hidden scores display `?`.
+
+Pagination follows continuations relevant to the requested depth/limit and linked replies. A page-budget limit produces a warning on stderr instead of silently implying that every reply was fetched. If the requested comment or its ancestor chain cannot be retrieved, the command fails rather than printing an unrelated or disconnected thread. Reddit's total count can include deleted or otherwise inaccessible comments.
 
 ### Browse a subreddit
 
 ```bash
-python3 scripts/read_subreddit.py "SUBREDDIT" [--sort MODE] [--limit N]
+.venv/bin/python scripts/read_subreddit.py pebble --sort new --limit 15
 ```
 
-- Accepts bare names (`unixporn`), shorthand (`r/unixporn`), or full URLs
-- `--sort` — `hot` (default), `new`, `top`, `rising`
-- `--limit` — number of posts (default: 15)
+Accepts names, `r/name`, or full Reddit subreddit URLs, including the aggregate feeds `all` and `popular`.
+
+- `--sort`: `hot` (default), `new`, `top`, or `rising`.
+- `--limit`: positive number of non-stickied posts (default: 15). The client paginates when necessary, up to 100 listing pages.
 
 ### Search a subreddit
 
 ```bash
-python3 scripts/search_subreddit.py "SUBREDDIT" "SEARCH TERMS" [--sort MODE] [--time RANGE] [--limit N]
+.venv/bin/python scripts/search_subreddit.py pebble linux --sort new --time year --limit 25
 ```
 
-- Searches only the selected subreddit
-- `--sort` — `new` (default), `relevance`, `hot`, `top`, or `comments`
-- `--time` — `year` (default), `hour`, `day`, `week`, `month`, or `all`
-- Useful for current research that general-purpose search engines may not have indexed
+Search is restricted to the specified subreddit; out-of-scope results are rejected.
 
-## Why?
+- `--sort`: `new` (default), `relevance`, `hot`, `top`, or `comments`.
+- `--time`: `year` (default), `hour`, `day`, `week`, `month`, or `all`.
+- `--limit`: positive number of results (default: 25), with cursor pagination as needed.
 
-Reddit's web UI is heavy and hostile to readability. These scripts give you the content — post text, scores, threaded comments — without the bloat. They're also handy when you hit Reddit links from an environment where the site doesn't render well (terminal-only machines, SSH sessions, inside an AI coding agent, etc.).
+Prefer this for current Reddit research: general web search may not have indexed recent posts.
+
+## Errors and maintenance
+
+HTTP failures, rate limits, GraphQL errors (including partial-error responses), malformed responses, and missing linked comments exit nonzero with diagnostics on stderr. There is no alternate backend or silent fallback. Anonymous sessions refresh on expiry; rate-limit errors are reported, not bypassed through token rotation.
+
+This is an **undocumented API**, not a promise of permanent anonymous access. Reddit can change its persisted operations, app authentication, or access policies. Operation hashes, app headers, and TLS configuration live in `scripts/reddit_fetch.py`. Check live behavior before updating them; changing the User-Agent alone does not provide browser-compatible TLS.
+
+Protocol research references: [Redlib's GraphQL migration](https://github.com/polak14/redlib/commit/29f18352cf54be4ffe579f773552acd0c45cdd08) and [`curl_cffi` documentation](https://curl-cffi.readthedocs.io/). This repository implements its own Python client; it does not vendor Redlib's Rust code.
 
 ## Use with dreb
 
-This project is primarily designed as a skill for [**dreb**](https://github.com/aebrer/dreb), an open-source AI coding agent harness. The `skills/` directory contains a dreb skill definition that lets the agent automatically read Reddit links that come up in conversation — no manual invocation needed.
-
-If you're using dreb, symlink or copy `skills/reddit-reader/` into your `~/.dreb/agent/skills/` directory and update the script paths in `SKILL.md`. The agent will then handle Reddit URLs for you.
-
-Works great standalone too, of course.
+Symlink `skills/reddit-reader/` into `~/.dreb/agent/skills/` and adjust the paths in `SKILL.md` if your checkout is not at `~/projects/reddit-reader`. The skill uses the checkout's `.venv/bin/python` explicitly, so it needs no shell activation.
 
 ## Tests
 
+Offline regression suite:
+
 ```bash
-npm test
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
-Runs offline Python and JavaScript regression tests, including parent-ID threading, linked-comment validation, fallback ordering, and browser readiness during redirects. No Reddit requests are made by the test suite.
+Opt-in live verification (makes real Reddit requests):
+
+```bash
+REDDIT_READER_LIVE=1 .venv/bin/python -m unittest discover -s tests -v
+```
+
+The live suite checks the original deeply linked comment, deleted-parent ancestry, deep continuation, zero-comment posts, aggregate feeds, listing sorts, feed/search pagination beyond 100 results, scoped/empty searches, and missing-target failure. It uses public content that can change or be removed. No live requests run without the environment flag.
 
 ## License
 
